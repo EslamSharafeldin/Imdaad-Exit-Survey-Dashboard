@@ -715,22 +715,38 @@ async function ensureFirebaseAuth(){
 
 async function loadCxStore(){
   const firebaseOk = await ensureFirebaseAuth();
-  for(const rec of RAW_DATA){
-    let stored = null;
-    if(firebaseOk){
-      try{
-        const doc = await db.collection('exitSurveyCX').doc(String(rec.id)).get();
-        if(doc.exists) stored = doc.data();
-      }catch(e){ /* Firestore read failed — fall through to local cache */ }
+  let firestoreData = {};
+
+  if(firebaseOk){
+    try{
+      const snapshot = await db.collection('exitSurveyCX').get();
+
+      snapshot.forEach(doc => {
+        firestoreData[String(doc.id)] = doc.data();
+      });
+    }catch(e){
+      console.error('Firestore read failed — using local cache', e);
     }
+  }
+
+  for(const rec of RAW_DATA){
+    let stored = firestoreData[String(rec.id)] || null;
+
     if(!stored){
       try{
         const raw = localStorage.getItem(CX_STORAGE_PREFIX + rec.id);
         if(raw) stored = JSON.parse(raw);
-      }catch(e){ /* no saved value yet, or storage unavailable — fine, use defaults */ }
+      }catch(e){
+        // No local saved value — use defaults
+      }
     }
-    cxStore[rec.id] = Object.assign(defaultCxFor(rec), stored||{});
+
+    cxStore[rec.id] = Object.assign(
+      defaultCxFor(rec),
+      stored || {}
+    );
   }
+
   storageReady = true;
 }
 
